@@ -1,0 +1,26 @@
+{
+    "id": "Watch-Next",
+    "name": "Watch Next",
+    "version": "1.0.0",
+    "manifestURI": "",
+    "language": "typescript",
+    "type": "plugin",
+    "description": "Create an ordered list of anime to watch next from your planning list",
+    "author": "bas1874",
+    "icon": "https://raw.githubusercontent.com/Bas1874/Watch-Next-Seanime/refs/heads/main/src/icon/icon.png",
+    "website": "",
+    "lang": "en",
+    "payloadURI": "",
+    "plugin": {
+        "version": "1",
+        "permissions": {
+            "scopes": [
+                "anilist",
+				"database",
+				"playback",
+                "storage" 
+            ]
+        }
+    },
+    "isDevelopment": true
+}
