@@ -19,7 +19,9 @@ function init() {
         const anilistPlanned = ctx.state<WatchOrderAnime[]>([])
         const currentView = ctx.state<"main" | "add">("main")
         const isLoading = ctx.state<boolean>(false)
-        const searchTerm = ctx.fieldRef<string>("") // State for the search input
+        const searchTerm = ctx.fieldRef<string>("")
+        // New state for the confirmation dialog
+        const showRemoveAllConfirmation = ctx.state<boolean>(false)
 
         // --- STORAGE KEY ---
         const storageKey = "watchOrderList"
@@ -93,10 +95,22 @@ function init() {
             currentView.set("main")
         })
 
+        // This handler now shows the confirmation dialog
         ctx.registerEventHandler("remove_all_anime", () => {
+            showRemoveAllConfirmation.set(true)
+        })
+
+        // New handler to confirm the removal
+        ctx.registerEventHandler("confirm_remove_all", () => {
             orderedList.set([])
             saveListToStorage([])
             ctx.toast.success("Watch order list has been cleared.")
+            showRemoveAllConfirmation.set(false)
+        })
+
+        // New handler to cancel the removal
+        ctx.registerEventHandler("cancel_remove_all", () => {
+            showRemoveAllConfirmation.set(false)
         })
 
         ctx.registerEventHandler("search_term_changed", () => {
@@ -104,9 +118,31 @@ function init() {
         })
 
         // --- UI LAYOUT FUNCTIONS ---
+        
+        // New layout function for the confirmation dialog
+        function removeAllConfirmationLayout() {
+            return tray.div({
+                className: "absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50 p-4",
+                items: [
+                    tray.div({
+                        className: "bg-gray-800 p-6 rounded-lg shadow-xl text-center",
+                        items: [
+                            tray.text("Are you sure?", { className: "text-xl font-bold mb-2" }),
+                            tray.text("This will permanently delete your entire watch order list.", { className: "mb-6" }),
+                            tray.div({
+                                className: "flex gap-4 justify-center",
+                                items: [
+                                    tray.button({ label: "Cancel", intent: "gray-subtle", onClick: "cancel_remove_all" }),
+                                    tray.button({ label: "Yes, Remove All", intent: "alert", onClick: "confirm_remove_all" })
+                                ]
+                            })
+                        ]
+                    })
+                ]
+            })
+        }
 
         function headerLayout(title: string, showAddButton: boolean = false) {
-            // Dynamically build the list of buttons to avoid adding `null` to the items array
             const headerButtons = [];
             if (showAddButton && orderedList.get().length > 0) {
                 headerButtons.push(
@@ -144,86 +180,98 @@ function init() {
 
         function mainLayout() {
             const list = orderedList.get()
+            const showConfirmation = showRemoveAllConfirmation.get()
+
+            let content;
 
             if (list.length === 0) {
-                return tray.div({
+                content = tray.div({
                     items: [
-                        headerLayout("My Watch Order", true),
                         tray.text("Your list is empty.", { className: "text-center text-gray-400 mt-8" }),
                         tray.text("Click 'Add Anime' to build your watch order.", { className: "text-center text-gray-400" }),
                     ],
                 })
-            }
-
-            const listItems = list.map((anime, index) => {
-                return tray.div({
-                    className: "relative",
-                    items: [
-                        tray.button({
-                            label: " ",
-                            className: "absolute inset-0 w-full h-full z-10 bg-transparent hover:bg-white/5 border-none cursor-pointer",
-                            onClick: ctx.eventHandler(`navigate_${anime.id}`, () => ctx.screen.navigateTo("/entry", { id: anime.id.toString() }))
-                        }),
-                        tray.div({
-                            items: [
-                                tray.text((index + 1).toString(), { className: "text-2xl font-bold text-gray-400 w-8 text-center" }),
-                                tray.div([], {
-                                    style: {
-                                        backgroundImage: `url(${anime.coverImage})`,
-                                        backgroundSize: "cover",
-                                        backgroundPosition: "center",
-                                        width: "60px",
-                                        height: "84px",
-                                        borderRadius: "4px",
-                                    },
-                                }),
-                                tray.text(`${anime.title}`, { className: "flex-grow font-semibold" }),
-                                tray.div({
-                                    items: [
-                                        tray.button({
-                                            label: "⬆️",
-                                            onClick: ctx.eventHandler(`move_up_${index}`, () => {
-                                                if (index > 0) {
-                                                    const newList = [...orderedList.get()];
-                                                    [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]]
+            } else {
+                 const listItems = list.map((anime, index) => {
+                    return tray.div({
+                        className: "relative",
+                        items: [
+                            tray.button({
+                                label: " ",
+                                className: "absolute inset-0 w-full h-full z-10 bg-transparent hover:bg-white/5 border-none cursor-pointer",
+                                onClick: ctx.eventHandler(`navigate_${anime.id}`, () => ctx.screen.navigateTo("/entry", { id: anime.id.toString() }))
+                            }),
+                            tray.div({
+                                items: [
+                                    tray.text((index + 1).toString(), { className: "text-2xl font-bold text-gray-400 w-8 text-center" }),
+                                    tray.div([], {
+                                        style: {
+                                            backgroundImage: `url(${anime.coverImage})`,
+                                            backgroundSize: "cover",
+                                            backgroundPosition: "center",
+                                            width: "60px",
+                                            height: "84px",
+                                            borderRadius: "4px",
+                                        },
+                                    }),
+                                    tray.text(`${anime.title}`, { className: "flex-grow font-semibold" }),
+                                    tray.div({
+                                        items: [
+                                            tray.button({
+                                                label: "⬆️",
+                                                onClick: ctx.eventHandler(`move_up_${index}`, () => {
+                                                    if (index > 0) {
+                                                        const newList = [...orderedList.get()];
+                                                        [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]]
+                                                        orderedList.set(newList)
+                                                        saveListToStorage(newList)
+                                                    }
+                                                }),
+                                                intent: "gray-subtle", size: "sm", disabled: index === 0
+                                            }),
+                                            tray.button({
+                                                label: "⬇️",
+                                                onClick: ctx.eventHandler(`move_down_${index}`, () => {
+                                                    if (index < orderedList.get().length - 1) {
+                                                        const newList = [...orderedList.get()];
+                                                        [newList[index + 1], newList[index]] = [newList[index], newList[index + 1]]
+                                                        orderedList.set(newList)
+                                                        saveListToStorage(newList)
+                                                    }
+                                                }),
+                                                intent: "gray-subtle", size: "sm", disabled: index === list.length - 1,
+                                            }),
+                                            tray.button({
+                                                label: "❌",
+                                                onClick: ctx.eventHandler(`remove_${anime.id}`, () => {
+                                                    const newList = orderedList.get().filter(a => a.id !== anime.id)
                                                     orderedList.set(newList)
                                                     saveListToStorage(newList)
-                                                }
+                                                }),
+                                                intent: "alert-subtle", size: "sm"
                                             }),
-                                            intent: "gray-subtle", size: "sm", disabled: index === 0
-                                        }),
-                                        tray.button({
-                                            label: "⬇️",
-                                            onClick: ctx.eventHandler(`move_down_${index}`, () => {
-                                                if (index < orderedList.get().length - 1) {
-                                                    const newList = [...orderedList.get()];
-                                                    [newList[index + 1], newList[index]] = [newList[index], newList[index + 1]]
-                                                    orderedList.set(newList)
-                                                    saveListToStorage(newList)
-                                                }
-                                            }),
-                                            intent: "gray-subtle", size: "sm", disabled: index === list.length - 1,
-                                        }),
-                                        tray.button({
-                                            label: "❌",
-                                            onClick: ctx.eventHandler(`remove_${anime.id}`, () => {
-                                                const newList = orderedList.get().filter(a => a.id !== anime.id)
-                                                orderedList.set(newList)
-                                                saveListToStorage(newList)
-                                            }),
-                                            intent: "alert-subtle", size: "sm"
-                                        }),
-                                    ],
-                                    className: "flex flex-col gap-1 relative z-20",
-                                }),
-                            ],
-                            className: "flex items-center gap-4 p-2 border-b border-gray-700",
-                        }),
-                    ]
+                                        ],
+                                        className: "flex flex-col gap-1 relative z-20",
+                                    }),
+                                ],
+                                className: "flex items-center gap-4 p-2 border-b border-gray-700",
+                            }),
+                        ]
+                    })
                 })
+                content = tray.div({ items: listItems })
+            }
+            
+            // The main container is now relative, allowing the confirmation dialog to overlay it.
+            return tray.div({
+                className: "relative",
+                items: [
+                    headerLayout("My Watch Order", true),
+                    content,
+                    // Conditionally render the confirmation dialog
+                    showConfirmation ? removeAllConfirmationLayout() : null
+                ].filter(Boolean) // Filter out null to prevent rendering issues
             })
-
-            return tray.div({ items: [headerLayout("My Watch Order", true), ...listItems] })
         }
 
         function addAnimeLayout() {
